@@ -156,9 +156,22 @@ type SliceAndSumBenchmarks () =
     member _.Density_1_Percent_New () =
         NewTests.``1% Density SliceAndSum`` ()
 
+
+open Flips.Types
+
+let profile () =
+    
+    let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
+
+    for _ in 0 .. 100_000 do
+        result <- NewTests.``100% Density SliceAndSum`` ()
+
+    result
+
 [<EntryPoint>]
 let main argv =
 
-    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
-
+    //let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
+    let x = profile ()
+    printfn "%A" x
     0 // return an integer exit code
