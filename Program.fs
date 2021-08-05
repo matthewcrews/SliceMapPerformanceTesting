@@ -2,8 +2,8 @@
 open BenchmarkDotNet.Running
 open BenchmarkDotNet.Attributes
 
-let dim1Count = 10_000
-let dim2Count = 10_000
+let dim1Count = 100
+let dim2Count = 100
 let numberIterations = 1
 let rng = System.Random 123
 
@@ -130,35 +130,35 @@ module NewTests =
 
 
 [<MemoryDiagnoser>]
-type Benchmarks () =
+type SliceAndSumBenchmarks () =
 
     [<Benchmark>]
-    member _.``Current SM: 100% Density SliceAndSum`` () =
+    member _.Density_100_Percent_Old () =
         OldTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.``Current SM: 10% Density SliceAndSum`` () =
-        OldTests.``10% Density SliceAndSum`` ()
-
-    [<Benchmark>]
-    member _.``Current SM: 1% Density SliceAndSum`` () =
-        OldTests.``1% Density SliceAndSum`` ()
-
-    [<Benchmark>]
-    member _.``New SM: 100% Density SliceAndSum`` () =
+    member _.Density_100_Percent_New () =
         NewTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.``New SM: 10% Density SliceAndSum`` () =
+    member _.Density_10_Percent_Old () =
+        OldTests.``10% Density SliceAndSum`` ()
+
+    [<Benchmark>]
+    member _.Density_10_Percent_New () =
         NewTests.``10% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.``New SM: 1% Density SliceAndSum`` () =
+    member _.Density_1_Percent_Old () =
+        OldTests.``1% Density SliceAndSum`` ()
+
+    [<Benchmark>]
+    member _.Density_1_Percent_New () =
         NewTests.``1% Density SliceAndSum`` ()
 
 [<EntryPoint>]
 let main argv =
 
-    let summary = BenchmarkRunner.Run<Benchmarks>()
+    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
 
     0 // return an integer exit code
