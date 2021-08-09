@@ -6,332 +6,246 @@ open System.Collections.Generic
 type Filter =
     | All
 
-type Interval = {
-    Min : int
-    Max : int
+[<Struct>]
+type IndexRange = {
+    Start : int
+    Length : int
 }
 
-type internal KeyRecord<'Key> = {
-    Key : 'Key
-    Interval : Interval
-    NextRecordIdx : int
-}
+let inline hadamardProduct (l: SliceMap<_,_>, r: SliceMap<_,_>) =
+    let lKeys = l.Keys.Span
+    let lValues = l.Values.Span
+    let rKeys = r.Keys.Span
+    let rValues = r.Values.Span
+    let outKeys = Array.zeroCreate l.Keys.Length
+    let outValues = Array.zeroCreate r.Keys.Length
 
-type internal KeyInterval<'Key> = {
-    Key : 'Key
-    Interval : Interval
-}
+    let mutable outIdx = 0
+    let mutable lIdx = 0
+    let mutable rIdx = 0
 
-module internal Interval =
+    while lIdx < lKeys.Length && rIdx < rKeys.Length do
+        let c = l.Comparer.Compare (lKeys.[lIdx], rKeys.[rIdx])
 
-    let overlaps (i1: seq<Interval>) (i2: seq<Interval>) =
-
-        let rec loop (s1: IEnumerator<Interval>, s1HasValue: bool, s2: IEnumerator<Interval>, s2HasValue: bool) =
-
-            if s1HasValue && s2HasValue then
-
-                if s1.Current.Max < s2.Current.Min then
-                    loop (s1, s1.MoveNext (), s2, s2HasValue)
-                elif s2.Current.Max < s1.Current.Min then
-                    loop (s1, s1HasValue, s2, s2.MoveNext ())
-                else
-                    let nextInterval = {
-                            Min = System.Math.Max (s1.Current.Min, s2.Current.Min)
-                            Max = System.Math.Min (s1.Current.Max, s2.Current.Max)
-                        }
-
-                    if s1.Current.Max > s2.Current.Max then
-                        Some (nextInterval, (s1, s1HasValue, s2, s2.MoveNext ()))
-                    else
-                        Some (nextInterval, (s1, s1.MoveNext (), s2, s2HasValue))
-
-            else
-                None
-
-        let s1 = i1.GetEnumerator ()
-        let s2 = i2.GetEnumerator ()
-
-        let state = (s1, s1.MoveNext (), s2, s2.MoveNext ())
-        Seq.unfold loop state
-    
-
-// This performs a Hadamard Product of two sequences. The `joiner` function is used
-// to map the higher dimensional seq `higher` to the lower dimensional seq `lower`.
-let inline internal hadamardProductDifferentDims (higher: seq<_>) (lower: seq<_>) joiner =
-
-    let rec loop (higher: IEnumerator<_>, higherHasValue, lower: IEnumerator<_>, lowerHasValue) =
-
-        if higherHasValue && lowerHasValue then
-            let higherKey, higherValue = higher.Current
-            let lowerKey, lowerValue = lower.Current
-
-            let higherJoinKey = joiner higherKey
-
-            if higherJoinKey = lowerKey then
-                let nextValue = higherValue * lowerValue
-                let nextReturn = higherKey, nextValue
-                let nextState = (higher, higher.MoveNext (), lower, lower.MoveNext())
-                Some (nextReturn, nextState)
-            elif higherJoinKey < lowerKey then
-                loop (higher, higher.MoveNext (), lower, lowerHasValue)
-            else
-                loop (higher, higherHasValue, lower, lower.MoveNext ())
-
+        if c = 0 then
+            outKeys.[outIdx] <- lKeys.[lIdx]
+            outValues.[outIdx] <- lValues.[lIdx] * rValues.[rIdx]
+            outIdx <- outIdx + 1
+            lIdx <- lIdx + 1
+            rIdx <- rIdx + 1
+        elif c < 0 then
+            lIdx <- lIdx + 1
         else
-            None
+            rIdx <- rIdx + 1
 
-    let higherEnumerator = higher.GetEnumerator ()
-    let lowerEnumerator = lower.GetEnumerator ()
-    (higherEnumerator, higherEnumerator.MoveNext (), lowerEnumerator, lowerEnumerator.MoveNext ())
-    |> Seq.unfold loop
-        
-
-// Performs the Hadamard Product on two sequences with matching dimensions.
-let inline hadamardProduct (a: seq<_>) (b: seq<_>) =
-
-    let rec loop (a: IEnumerator<_>, aHasValue, b: IEnumerator<_>, bHasValue) =
-
-        if aHasValue && bHasValue then
-            let aKey, aValue = a.Current
-            let bKey, bValue = b.Current
-
-            if aKey = bKey then
-                let nextValue = aValue * bValue
-                let nextReturn = aKey, nextValue
-                let nextState = (a, a.MoveNext (), b, b.MoveNext())
-                Some (nextReturn, nextState)
-            elif aKey < bKey then
-                loop (a, a.MoveNext (), b, bHasValue)
-            else
-                loop (a, aHasValue, b, b.MoveNext ())
-
-        else
-            None
-
-    let aEnumerator = a.GetEnumerator ()
-    let bEnumerator = b.GetEnumerator ()
-    (aEnumerator, aEnumerator.MoveNext (), bEnumerator, bEnumerator.MoveNext ())
-    |> Seq.unfold loop
-        
+    // Only want the data we actually computed
+    SliceMap (l.Comparer, ReadOnlyMemory (outKeys, 0, outIdx), ReadOnlyMemory (outValues, 0, outIdx))
 
 
-let internal generateKeyIntervals1D (keys: _[]) =
-    keys
-    |> Array.mapi (fun idx key -> { Key = key; Interval = { Min = idx; Max = idx }})
+let inline sum (x : SliceMap<_,_>) =
+    let values = x.Values.Span
+    let mutable acc = LanguagePrimitives.GenericZero
+    for idx = 0 to x.Values.Length - 1 do
+        acc <- acc + values.[idx]
+    acc
 
 
-let internal generateKeyIntervals2D (keys: _[]) =
+type SliceMap<'k, 'v when 'k : comparison> (comparer: IComparer<'k>, keys: ReadOnlyMemory<'k>, values: ReadOnlyMemory<'v>) =
 
-    if keys.Length = 0 then
-        [||], [||]
-    else
-
-        let mutable keys1 = []
-        let mutable keys2 = []
-        let mutable currKey1, _ = keys.[keys.Length - 1]
-        let mutable key1IntervalEndIdx = keys.Length - 1
-
-        for idx = keys.Length - 1 downto 0 do
-            let nextKey1, nextKey2 = keys.[idx]
-
-            keys2 <- { Key = nextKey2; Interval = { Min = idx; Max = idx }} :: keys2
-
-            if nextKey1 <> currKey1 then
-                keys1 <- { Key = currKey1; Interval = { Min = idx + 1; Max = key1IntervalEndIdx }} :: keys1
-                currKey1 <- nextKey1
-                key1IntervalEndIdx <- idx
-
-            if idx = 0 then
-                keys1 <- { Key = currKey1; Interval = { Min = idx; Max = key1IntervalEndIdx }} :: keys1
-
-        List.toArray keys1, List.toArray keys2
-
-
-let internal buildKeyRecords (intervals: KeyInterval<_>[]) =
-
-    if intervals.Length = 0 then
-        Array.empty
-    else
-        let result = Array.zeroCreate intervals.Length
-        let lastRecordIndexForInterval = Dictionary ()
-
-        for idx = intervals.Length - 1 downto 0 do
-            let keyInterval = intervals.[idx]
-            let lastIdx =
-                match lastRecordIndexForInterval.TryGetValue keyInterval.Key with
-                | true, lastIdx -> lastIdx
-                | false, _ -> intervals.Length // This will be beyond the bounds of the array
-            lastRecordIndexForInterval.[keyInterval.Key] <- idx
-            result.[idx] <- { Key = keyInterval.Key; Interval = keyInterval.Interval; NextRecordIdx = lastIdx }
-
-        result
-
-
-type SliceMapExpr<'Key, 'Value when 'Key : comparison> (keyValuePairs: seq<'Key * 'Value>) =
-
-    let keyValuePairs = keyValuePairs
-
-    member _.KeyValuePairs = keyValuePairs
-    member _.Values = keyValuePairs |> Seq.map snd
-
-    static member inline ( .* ) (expr: SliceMapExpr<_,_>, sm: SliceMap<_,_>) =
-        hadamardProduct expr.KeyValuePairs sm.KeyValuePairs
-        |> SliceMapExpr
-
-
-type SliceMap<'Key, 'Value when 'Key : comparison> 
-    internal (keyIndexRecords: KeyRecord<'Key>[], values: 'Value[], indexIntervals: seq<Interval>) =
-
-    let keyIndexRecords = keyIndexRecords
+    let comparer = comparer
+    let keys = keys
     let values = values
-    let indexIntervals = indexIntervals
 
-    new (data: seq<'Key * 'Value>) =
-        let sortedData =
-            let x = 
-                data
-                |> Seq.toArray
-                |> Array.distinctBy fst
+    new (keyValuePairs: seq<'k * 'v>) =
+        let data =
+            let x = Array.ofSeq keyValuePairs
             Array.sortInPlaceBy fst x
             x
 
-        let keyIndexRecords = 
-            sortedData
-            |> Array.map fst
-            |> generateKeyIntervals1D
-            |> buildKeyRecords
-            
-        let values = sortedData |> Array.map snd
-        let indexIntervals = Seq.singleton { Min = 0; Max = values.Length - 1 }
-        SliceMap (keyIndexRecords, values, indexIntervals)
+        let keys = data |> Array.map fst
+        let values = data |> Array.map snd
+        let comparer = LanguagePrimitives.FastGenericComparer<'k>
+        SliceMap (comparer, ReadOnlyMemory keys, ReadOnlyMemory values)
 
+    member _.Keys : ReadOnlyMemory<'k> = keys
+    member _.Values : ReadOnlyMemory<'v> = values
+    member _.Comparer : IComparer<'k> = comparer
 
-    member _.KeyValuePairs : seq<'Key * 'Value> =
-        let keyInterval =
-            let outputSeq = Array.toSeq keyIndexRecords
-            outputSeq.GetEnumerator ()
-        let indexInterval = indexIntervals.GetEnumerator ()
-
-        let rec loop (keyInterval: IEnumerator<KeyRecord<'Key>>, keyIntervalHasValue, indexInterval: IEnumerator<Interval>, indexIntervalHasValue) =
-
-            if keyIntervalHasValue && indexIntervalHasValue then
-                    
-                if keyInterval.Current.Interval.Max < indexInterval.Current.Min then
-                    // The KeyInterval is behind the IndexInterval to move KeyInterval forward
-                    loop (keyInterval, keyInterval.MoveNext (), indexInterval, indexIntervalHasValue)
-                elif indexInterval.Current.Max < keyInterval.Current.Interval.Min then
-                    // The IndexInterval is behind the KeyInterval so move the IndexInterval forward
-                    loop (keyInterval, keyIntervalHasValue, indexInterval, indexInterval.MoveNext ())
-                else
-                    // The KeyInterval and the IndexInterval overlap. By definition, the Max Value of the MinIndices
-                    // must be the index for the next value. Return it and move IndexInterval forward
-                    let nextIdx = Math.Max (keyInterval.Current.Interval.Min, indexInterval.Current.Min)
-                    let nextValue = values.[nextIdx]
-                    let nextReturn = (keyInterval.Current.Key, nextValue)
-
-                    // NOTE: Could possibly be wrong. Need to think about this
-                    let nextState =
-                        if keyInterval.Current.Interval.Max > indexInterval.Current.Max then
-                            keyInterval, keyIntervalHasValue, indexInterval, indexInterval.MoveNext ()
-                        else
-                            keyInterval, keyInterval.MoveNext (), indexInterval, indexIntervalHasValue
-
-                    Some (nextReturn, nextState)
-
-            else
-                None
-
-        (keyInterval, keyInterval.MoveNext (), indexInterval, indexInterval.MoveNext ())
-        |> Seq.unfold loop
-
-    member this.Values = this.KeyValuePairs |> Seq.map snd
-
-
-    static member inline ( .* ) (a: SliceMap<_,_>, b: SliceMap<_,_>) =
-        hadamardProduct a.KeyValuePairs b.KeyValuePairs
-        |> SliceMapExpr
-
-
-type SliceMap2D<'Key1, 'Key2, 'Value when 'Key1 : comparison and 'Key2 : comparison>
-    internal (key1Intervals: KeyRecord<'Key1>[], key2Intervals: KeyRecord<'Key2>[], values: 'Value[], indexIntervals: seq<Interval>) =
-
-    let key1Intervals = key1Intervals
-    let key2Intervals = key2Intervals
-    let values = values
-    let indexIntervals = indexIntervals
-
-    let getIntervalsForKey (intervals: KeyRecord<_>[]) key =
-            
-        if intervals.Length > 0 then
-                
-            let rec loop idx =
-                if idx > intervals.Length - 1 then
-                    None
-                else
-                    let record = intervals.[idx]
-                    if record.Key = key then
-                        // We now just start skipping to the intervals we care about
-                        let nextIdx = record.NextRecordIdx
-                        Some (record.Interval, nextIdx)
-                    else
-                        loop (idx + 1)
-
-            0
-            |> Seq.unfold loop
-
+    static member inline ( .* ) (l: SliceMap<_,_>, r: SliceMap<_,_>) =
+        if l.Keys.Length > r.Keys.Length then
+            hadamardProduct (l, r)
         else
-            Seq.empty
+            hadamardProduct (r, l)
 
 
-    new (data: seq<'Key1 * 'Key2 * 'Value>) =
+
+let private toIntervals (x: _[]) =
+
+    let groups = Array.groupBy id x
+
+    let keyLengths =
+        groups
+        |> Array.map (fun (key, group) -> key, group.Length)
+
+    let startIdxs =
+        keyLengths
+        |> Array.scan (fun acc (k, length) -> acc + length) 0
+
+    Array.zip keyLengths startIdxs.[.. startIdxs.Length - 2]
+    |> Array.map (fun ((key, length), startIdx) -> key, { Start = startIdx; Length = length })
+
+[<Struct>]
+type SliceMap2DInternals<'k1, 'k2, 'v when 'k1 : comparison and 'k2 : comparison> = {
+    OuterComparer : IComparer<'k1>
+    InnerComparer : IComparer<'k2>
+    OuterKeyValues : 'k1[]
+    OuterKeyRanges : IndexRange[]
+    InnerKeyValues : ReadOnlyMemory<'k2>
+    Values : ReadOnlyMemory<'v>
+}
+
+module private SliceMap2DInternals =
+
+    let create (keyValuePairs: seq<'k1 * 'k2 * 'v>) =
         let keySelector (k1, k2, _) = k1, k2
-        let sortedData =
-            let x = 
-                data
-                |> Seq.toArray
-                |> Array.distinctBy keySelector
+        let valueSelector (_, _, v) = v
+        let data =
+            let x = Array.ofSeq keyValuePairs
             Array.sortInPlaceBy keySelector x
             x
 
-        let key1Intervals, key2Intervals = 
-            sortedData
-            |> Array.map keySelector
-            |> generateKeyIntervals2D
-
-        let key1Records = buildKeyRecords key1Intervals
-        let key2Records = buildKeyRecords key2Intervals
-            
-        let values = sortedData |> Array.map (fun (_,_,v) -> v)
-        let indexIntervals = Seq.singleton { Min = 0; Max = values.Length - 1 }
-        SliceMap2D (key1Records, key2Records, values, indexIntervals)
-
-
-    member this.Item
-        // NOTE: Ignoring the Filter at this time
-        with get (f: Filter, sliceKey: 'Key2) =
-            let key2Intervals = getIntervalsForKey key2Intervals sliceKey
-            let overlaps = Interval.overlaps key2Intervals indexIntervals
-            SliceMap (key1Intervals, values, overlaps)
-
-    member this.Item
-        // NOTE: Ignoring the Filter at this time
-        with get (sliceKey: 'Key1, f: Filter) =
-            let key1Intervals = getIntervalsForKey key1Intervals sliceKey
-            let overlaps = Interval.overlaps key1Intervals indexIntervals
-            SliceMap (key2Intervals, values, overlaps)
+        let keys = data |> Array.map keySelector
+        let keys1 = keys |> Array.map fst
+        let keysAndSpans = toIntervals keys1
+        let key1Values = keysAndSpans |> Array.map fst
+        let key1Ranges = keysAndSpans |> Array.map snd
+        let keys2 = keys |> Array.map snd
+        let values = data |> Array.map valueSelector
+        let compare1 = LanguagePrimitives.FastGenericComparer<'k1>
+        let compare2 = LanguagePrimitives.FastGenericComparer<'k2>
+        {
+            OuterComparer = compare1
+            InnerComparer = compare2
+            OuterKeyValues = key1Values
+            OuterKeyRanges = key1Ranges
+            InnerKeyValues = ReadOnlyMemory keys2
+            Values = ReadOnlyMemory values
+        }
 
 
-let inline inputs (v) = 
-    ((^InputValues) : (member Values: seq< ^Value>) v)
+    let swapKeys (s: SliceMap2DInternals<'k1, 'k2, 'v>) =
+        let innerKeyValues = s.InnerKeyValues.Span
+        let values = s.Values.Span
+        let keyTuples : (struct ('k2 * 'k1 * 'v))[] = Array.zeroCreate innerKeyValues.Length
 
-let inline zero () = FSharp.Core.LanguagePrimitives.GenericZero<_>
+        let mutable outerKeyIdx = 0
+        let mutable outerKeyCount = 0
 
-let inline sum x =
+        for innerKeyIdx = 0 to s.InnerKeyValues.Length - 1 do
+            keyTuples.[innerKeyIdx] <- struct (innerKeyValues.[innerKeyIdx], s.OuterKeyValues.[outerKeyIdx], values.[innerKeyIdx])
+            outerKeyCount <- outerKeyCount + 1
 
-    let mutable acc = zero ()
-    let values = inputs x
+            if outerKeyCount = s.OuterKeyRanges.[outerKeyIdx].Length then
+                outerKeyIdx <- outerKeyIdx + 1
+                outerKeyCount <- 0
 
-    for v in values do
-        acc <- acc + v
+        let keySelector struct (k1, k2, _) = struct (k1, k2)
+        let valueSelector struct (_, _, v) = v
+        let keys = keyTuples |> Array.map keySelector
+        let keys1 = keys |> Array.map (fun struct (k1, _) -> k1)
+        let keysAndSpans = toIntervals keys1
+        let key1Values = keysAndSpans |> Array.map fst
+        let key1Ranges = keysAndSpans |> Array.map snd
+        let keys2 = keys |> Array.map (fun struct (_, k2) -> k2)
+        let values = keyTuples |> Array.map valueSelector
 
-    acc
+        {
+            OuterComparer = s.InnerComparer
+            InnerComparer = s.OuterComparer
+            OuterKeyValues = key1Values
+            OuterKeyRanges = key1Ranges
+            InnerKeyValues = ReadOnlyMemory keys2
+            Values = ReadOnlyMemory values
+        }
+
+
+type SliceMap2DState<'k1, 'k2, 'v when 'k1 : comparison and 'k2 : comparison> =
+    | Key1Key2 of SliceMap2DInternals<'k1, 'k2, 'v>
+    | Key2Key1 of SliceMap2DInternals<'k2, 'k1, 'v>
+
+
+module private SliceMap2DState =
+
+    let swap (s: SliceMap2DState<'k1, 'k2, 'v>) =
+        match s with
+        | Key1Key2 internals -> SliceMap2DState.Key2Key1 (SliceMap2DInternals.swapKeys internals)
+        | Key2Key1 internals -> SliceMap2DState.Key1Key2 (SliceMap2DInternals.swapKeys internals)
+
+
+type SliceMap2D<'k1, 'k2, 'v 
+                 when 'k1 : comparison
+                 and 'k2 : comparison>
+    (internalState: SliceMap2DState<_, _, _>) =
+
+    let mutable internalState = internalState
+
+
+    new (keyValuePairs: seq<'k1 * 'k2 * 'v>) =
+        let internals = SliceMap2DInternals.create keyValuePairs
+        let state = SliceMap2DState.Key1Key2 internals
+        SliceMap2D state
+
+
+    member _.Item
+        // Ignoring `f` at this time
+        with get (x: 'k1, f: Filter) =
+
+            let internals =
+                match internalState with
+                | SliceMap2DState.Key1Key2 i -> i
+                | SliceMap2DState.Key2Key1 i -> 
+                    let reOrdered = SliceMap2DInternals.swapKeys i
+                    internalState <- SliceMap2DState.Key1Key2 reOrdered
+                    reOrdered
+
+            let mutable intervalIdx = 0
+            let mutable keepSearching = true
+
+            while keepSearching && intervalIdx < internals.OuterKeyValues.Length - 1 do
+                if internals.OuterComparer.Compare (internals.OuterKeyValues.[intervalIdx], x) = 0 then
+                    keepSearching <- false
+                else
+                    intervalIdx <- intervalIdx + 1
+
+            if not keepSearching then
+                let interval = internals.OuterKeyRanges.[intervalIdx]
+                SliceMap (internals.InnerComparer, internals.InnerKeyValues.Slice (interval.Start, interval.Length), internals.Values.Slice (interval.Start, interval.Length))
+            else
+                SliceMap (internals.InnerComparer, ReadOnlyMemory Array.empty, ReadOnlyMemory Array.empty)
+
+
+    member _.Item
+        // Ignoring `f` at this time
+        with get (f: Filter, x: 'k2) =
+            let internals =
+                match internalState with
+                | SliceMap2DState.Key2Key1 i -> i
+                | SliceMap2DState.Key1Key2 i -> 
+                    let reOrdered = SliceMap2DInternals.swapKeys i
+                    internalState <- SliceMap2DState.Key2Key1 reOrdered
+                    reOrdered
+
+            let mutable intervalIdx = 0
+            let mutable keepSearching = true
+
+            while keepSearching && intervalIdx < internals.OuterKeyValues.Length - 1 do
+                if internals.OuterComparer.Compare (internals.OuterKeyValues.[intervalIdx], x) = 0 then
+                    keepSearching <- false
+                else
+                    intervalIdx <- intervalIdx + 1
+
+            if not keepSearching then
+                let interval = internals.OuterKeyRanges.[intervalIdx]
+                SliceMap (internals.InnerComparer, internals.InnerKeyValues.Slice (interval.Start, interval.Length), internals.Values.Slice (interval.Start, interval.Length))
+            else
+                SliceMap (internals.InnerComparer, ReadOnlyMemory Array.empty, ReadOnlyMemory Array.empty)

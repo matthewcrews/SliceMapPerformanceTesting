@@ -1,4 +1,5 @@
 ﻿open System
+open TestSliceMap
 open BenchmarkDotNet.Running
 open BenchmarkDotNet.Attributes
 
@@ -61,9 +62,11 @@ module OldTests =
 
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
 
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_100Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_100Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_100Dense.[All, i])
 
         result
 
@@ -71,9 +74,11 @@ module OldTests =
     
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
     
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_10Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_10Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_10Dense.[All, i])
     
         result
 
@@ -81,9 +86,11 @@ module OldTests =
         
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
         
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_1Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_1Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_1Dense.[All, i])
         
         result
 
@@ -102,9 +109,11 @@ module NewTests =
 
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
         
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_100Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_100Dense.[i, TestSliceMap.Filter.All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_100Dense.[TestSliceMap.Filter.All, i])
         
         result
 
@@ -112,19 +121,23 @@ module NewTests =
     
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
             
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_10Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_10Dense.[i, TestSliceMap.Filter.All])
             
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_10Dense.[TestSliceMap.Filter.All, i])
+
         result
 
     let ``1% Density SliceAndSum`` () =
         
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
                 
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_1Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_1Dense.[i, TestSliceMap.Filter.All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_1Dense.[TestSliceMap.Filter.All, i])
                 
         result
 
@@ -133,27 +146,27 @@ module NewTests =
 type SliceAndSumBenchmarks () =
 
     [<Benchmark>]
-    member _.Density_100_Percent_Old () =
+    member _.Old_100Percent_Density () =
         OldTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_100_Percent_New () =
+    member _.New_100Percent_Density () =
         NewTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_10_Percent_Old () =
+    member _.Old_10Percent_Density () =
         OldTests.``10% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_10_Percent_New () =
+    member _.New_10Percent_Density () =
         NewTests.``10% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_1_Percent_Old () =
+    member _.Old_1Percent_Density () =
         OldTests.``1% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_1_Percent_New () =
+    member _.New_1Percent_Density () =
         NewTests.``1% Density SliceAndSum`` ()
 
 
@@ -171,7 +184,47 @@ let profile () =
 [<EntryPoint>]
 let main argv =
 
-    //let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
-    let x = profile ()
-    printfn "%A" x
+    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
+    //let x = profile ()
+
+    //let x1 =
+    //    [for i in 0..3 -> i, float i]
+    //    |> SliceMap
+    
+    //let x2 =
+    //    [for i in 0..4 do
+    //        for j in 0..4 ->
+    //            string i, j, i + j
+    //    ]
+    //    |> SliceMap2D
+        
+
+    //let s1 = x2.["1", All]
+    //let s2 = x2.[All, 1]
+    //let s3 = x2.["1", All]
+    //let sum1 = sum s1
+    //let sum2 = sum s2
+    //let sum3 = sum s3
+    //let r = sum s1
+
+    ////let x2 = x1 .* x1
+
+    ////let r = sum x2
+    //let x =
+    //    [1..10]
+    //    |> List.map (fun x -> x, float x)
+    //    |> SliceMap
+
+    //let x2 =
+    //    [for i in 1..10 do
+    //        for j in 1..10 ->
+    //            i, j, float (i + j)
+    //    ] |> SliceMap2D
+    
+    //let x2Slice = x2.[1, All]
+    
+    //let r = x .* x2Slice
+    //let r2 = sum r
+
+    //printfn "%A" r2
     0 // return an integer exit code
