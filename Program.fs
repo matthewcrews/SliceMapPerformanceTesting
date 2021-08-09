@@ -134,27 +134,27 @@ module NewTests =
 type SliceAndSumBenchmarks () =
 
     [<Benchmark>]
-    member _.Density_100_Percent_Old () =
+    member _.Old_100Percent_Density () =
         OldTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_100_Percent_New () =
+    member _.New_100Percent_Density () =
         NewTests.``100% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_10_Percent_Old () =
+    member _.Old_10Percent_Density () =
         OldTests.``10% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_10_Percent_New () =
+    member _.New_10Percent_Density () =
         NewTests.``10% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_1_Percent_Old () =
+    member _.Old_1Percent_Density () =
         OldTests.``1% Density SliceAndSum`` ()
 
     [<Benchmark>]
-    member _.Density_1_Percent_New () =
+    member _.New_1Percent_Density () =
         NewTests.``1% Density SliceAndSum`` ()
 
 
@@ -172,8 +172,8 @@ let profile () =
 [<EntryPoint>]
 let main argv =
 
-    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
-    //let x = profile ()
+    //let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
+    let x = profile ()
 
     //let x1 =
     //    [for i in 0..3 -> i, float i]
@@ -193,6 +193,21 @@ let main argv =
     ////let x2 = x1 .* x1
 
     ////let r = sum x2
+    //let x =
+    //    [1..10]
+    //    |> List.map (fun x -> x, float x)
+    //    |> SliceMap
 
-    //printfn "%A" r
+    //let x2 =
+    //    [for i in 1..10 do
+    //        for j in 1..10 ->
+    //            i, j, float (i + j)
+    //    ] |> SliceMap2D
+    
+    //let x2Slice = x2.[1, All]
+    
+    //let r = x .* x2Slice
+    //let r2 = sum r
+
+    //printfn "%A" r2
     0 // return an integer exit code
