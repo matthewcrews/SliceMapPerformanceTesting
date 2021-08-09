@@ -62,9 +62,11 @@ module OldTests =
 
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
 
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_100Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_100Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_100Dense.[All, i])
 
         result
 
@@ -72,9 +74,11 @@ module OldTests =
     
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
     
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_10Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_10Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_10Dense.[All, i])
     
         result
 
@@ -82,9 +86,11 @@ module OldTests =
         
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
         
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (currSm1 .* currSm2_1Dense.[i, All])
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_1Dense.[i, All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (currSm1 .* currSm2_1Dense.[All, i])
         
         result
 
@@ -103,9 +109,11 @@ module NewTests =
 
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
         
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_100Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_100Dense.[i, TestSliceMap.Filter.All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_100Dense.[TestSliceMap.Filter.All, i])
         
         result
 
@@ -113,19 +121,23 @@ module NewTests =
     
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
             
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_10Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_10Dense.[i, TestSliceMap.Filter.All])
             
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_10Dense.[TestSliceMap.Filter.All, i])
+
         result
 
     let ``1% Density SliceAndSum`` () =
         
         let mutable result = FSharp.Core.LanguagePrimitives.GenericZero<LinearExpression>
                 
-        for _ in 1 .. numberIterations do
-            for i in 0 .. dim1Count do
-                result <- sum (testSm1 .* testSm2_1Dense.[i, TestSliceMap.Filter.All])
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_1Dense.[i, TestSliceMap.Filter.All])
+
+        for i in 0 .. dim1Count do
+            result <- sum (testSm1 .* testSm2_1Dense.[TestSliceMap.Filter.All, i])
                 
         result
 
@@ -172,22 +184,27 @@ let profile () =
 [<EntryPoint>]
 let main argv =
 
-    //let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
-    let x = profile ()
+    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
+    //let x = profile ()
 
     //let x1 =
     //    [for i in 0..3 -> i, float i]
     //    |> SliceMap
     
     //let x2 =
-    //    [for i in 0..3 do
-    //        for j in 0..2 ->
-    //            i, j, float i
+    //    [for i in 0..4 do
+    //        for j in 0..4 ->
+    //            string i, j, i + j
     //    ]
     //    |> SliceMap2D
         
 
-    //let s1 = x2.[1, All]
+    //let s1 = x2.["1", All]
+    //let s2 = x2.[All, 1]
+    //let s3 = x2.["1", All]
+    //let sum1 = sum s1
+    //let sum2 = sum s2
+    //let sum3 = sum s3
     //let r = sum s1
 
     ////let x2 = x1 .* x1
