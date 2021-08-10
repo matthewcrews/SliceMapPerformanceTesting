@@ -3,8 +3,8 @@ open TestSliceMap
 open BenchmarkDotNet.Running
 open BenchmarkDotNet.Attributes
 
-let dim1Count = 100
-let dim2Count = 100
+let dim1Count = 1_000
+let dim2Count = 1_000
 let numberIterations = 1
 let rng = System.Random 123
 
@@ -184,8 +184,8 @@ let profile () =
 [<EntryPoint>]
 let main argv =
 
-    let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
-    //let x = profile ()
+    //let summary = BenchmarkRunner.Run<SliceAndSumBenchmarks>()
+    let x = profile ()
 
     //let x1 =
     //    [for i in 0..3 -> i, float i]
